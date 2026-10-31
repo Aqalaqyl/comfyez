@@ -110,8 +110,7 @@ if [[ -z $INSTALL_PARENT ]]; then
 fi
 # Expand ~ and make absolute
 INSTALL_PARENT=${INSTALL_PARENT/#\~/$HOME}
-mkdir -p "$INSTALL_PARENT" || die "Cannot create directory: $INSTALL_PARENT"
-INSTALL_PARENT=$(cd "$INSTALL_PARENT" && pwd)
+INSTALL_PARENT=$(realpath -m "$INSTALL_PARENT")
 COMFY_DIR="$INSTALL_PARENT/ComfyUI"
 VENV_DIR="$COMFY_DIR/venv"
 MANAGER_DIR="$COMFY_DIR/custom_nodes/ComfyUI-Manager"
@@ -155,6 +154,8 @@ echo "  GPU backend : $GPU_TYPE"
 echo "  Torch index : ${TORCH_INDEX:-<default PyPI>}"
 echo
 confirm "Proceed?" || { echo "Aborted."; exit 0; }
+
+mkdir -p "$INSTALL_PARENT" || die "Cannot create directory: $INSTALL_PARENT"
 
 # ---------------------------------------------------------- clone ComfyUI ---
 echo
