@@ -11,26 +11,32 @@
 # Options:
 #   -d, --dir DIR       Parent folder to install into (ComfyUI/ is created inside)
 #   -g, --gpu TYPE      nvidia | amd | intel | cpu   (default: auto-detect)
-#   -p, --python BIN    Python interpreter to use (default: python3)
+#   -p, --python BIN    Python 3.13 interpreter to use (default: python3.13)
 #   -y, --yes           Non-interactive; accept defaults, don't prompt
 #   -h, --help          Show this help
 #
 # Env overrides:
 #   TORCH_INDEX_URL     Custom PyTorch wheel index (skips the GPU-based default)
 #
+# The virtual environment is always created with Python 3.13. On NVIDIA GPUs
+# PyTorch is installed from the CUDA 13.2 (cu132) wheel index.
+#
 set -euo pipefail
 
 COMFYUI_REPO="https://github.com/comfyanonymous/ComfyUI.git"
 MANAGER_REPO="https://github.com/Comfy-Org/ComfyUI-Manager.git"
 
+# Python version the virtual environment must use.
+REQUIRED_PY_VERSION="3.13"
+
 # PyTorch wheel indexes per backend. Override with TORCH_INDEX_URL if needed.
-TORCH_INDEX_NVIDIA="https://download.pytorch.org/whl/cu128"
+TORCH_INDEX_NVIDIA="https://download.pytorch.org/whl/cu132"
 TORCH_INDEX_AMD="https://download.pytorch.org/whl/rocm6.4"
 TORCH_INDEX_CPU="https://download.pytorch.org/whl/cpu"
 
 INSTALL_PARENT=""
 GPU_TYPE=""
-PYTHON_BIN="python3"
+PYTHON_BIN="python${REQUIRED_PY_VERSION}"
 ASSUME_YES=0
 
 # ---------------------------------------------------------------- helpers ---
@@ -92,12 +98,32 @@ info "Checking prerequisites"
 command -v git >/dev/null 2>&1 || die "git is not installed. Install it (e.g. 'sudo apt install git') and re-run."
 ok "git: $(git --version)"
 
-command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "Python interpreter '$PYTHON_BIN' not found. Install python3 or pass -p /path/to/python."
+python_install_hint() {
+  cat >&2 <<EOF
+
+Python ${REQUIRED_PY_VERSION} is required for the virtual environment.
+Install it, then re-run (or pass -p /path/to/python${REQUIRED_PY_VERSION}):
+
+  Ubuntu/Debian : sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt update
+                  sudo apt install python${REQUIRED_PY_VERSION} python${REQUIRED_PY_VERSION}-venv
+  Fedora        : sudo dnf install python${REQUIRED_PY_VERSION}
+  Arch          : sudo pacman -S python   (or python${REQUIRED_PY_VERSION} from AUR)
+  Any distro    : curl -LsSf https://astral.sh/uv/install.sh | sh && uv python install ${REQUIRED_PY_VERSION}
+                  then: $0 -p "\$(uv python find ${REQUIRED_PY_VERSION})"
+EOF
+}
+
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  python_install_hint
+  die "Python interpreter '$PYTHON_BIN' not found."
+fi
 
 PY_VERSION=$("$PYTHON_BIN" -c 'import sys; print("%d.%d" % sys.version_info[:2])')
-"$PYTHON_BIN" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' \
-  || die "Python >= 3.9 is required, found $PY_VERSION."
-ok "python: $PYTHON_BIN ($PY_VERSION)"
+if [[ $PY_VERSION != "$REQUIRED_PY_VERSION" ]]; then
+  python_install_hint
+  die "'$PYTHON_BIN' is Python $PY_VERSION, but Python $REQUIRED_PY_VERSION is required."
+fi
+ok "python: $PYTHON_BIN ($("$PYTHON_BIN" --version 2>&1))"
 
 "$PYTHON_BIN" -c 'import venv, ensurepip' >/dev/null 2>&1 \
   || die "The 'venv' module is missing. On Debian/Ubuntu run: sudo apt install python${PY_VERSION}-venv"
@@ -171,14 +197,21 @@ fi
 ok "ComfyUI source ready"
 
 # --------------------------------------------------------- virtualenv ---
-if [[ ! -x $VENV_DIR/bin/python ]]; then
-  info "Creating virtual environment"
-  "$PYTHON_BIN" -m venv "$VENV_DIR"
-else
-  info "Reusing existing virtual environment"
-fi
 VENV_PY="$VENV_DIR/bin/python"
-ok "venv: $VENV_DIR"
+if [[ -x $VENV_PY ]]; then
+  VENV_VERSION=$("$VENV_PY" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || echo "unknown")
+  if [[ $VENV_VERSION == "$REQUIRED_PY_VERSION" ]]; then
+    info "Reusing existing virtual environment"
+  else
+    warn "Existing venv uses Python $VENV_VERSION; recreating it with Python $REQUIRED_PY_VERSION"
+    rm -rf "$VENV_DIR"
+  fi
+fi
+if [[ ! -x $VENV_PY ]]; then
+  info "Creating virtual environment (Python $REQUIRED_PY_VERSION)"
+  "$PYTHON_BIN" -m venv "$VENV_DIR"
+fi
+ok "venv: $VENV_DIR ($("$VENV_PY" --version 2>&1))"
 
 info "Upgrading pip / setuptools / wheel"
 "$VENV_PY" -m pip install --upgrade pip setuptools wheel

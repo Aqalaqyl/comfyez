@@ -8,7 +8,12 @@ a Python virtual environment, in a folder of your choice.
 
 - Linux
 - `git`
-- Python 3.9+ with the `venv` module (Debian/Ubuntu: `sudo apt install python3-venv`)
+- Python 3.13 with the `venv` module. The virtual environment is always created with
+  Python 3.13; the script refuses to run with any other version.
+  - Ubuntu/Debian: `sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt install python3.13 python3.13-venv`
+  - Any distro via uv: `uv python install 3.13`, then run the script with `-p "$(uv python find 3.13)"`
+
+On NVIDIA GPUs PyTorch is installed from the CUDA 13.2 (`cu132`) wheel index.
 
 ## Usage
 
@@ -32,11 +37,12 @@ Non-interactive example:
 | --- | --- |
 | `-d, --dir DIR` | Parent folder to install into |
 | `-g, --gpu TYPE` | `nvidia`, `amd`, `intel` or `cpu` (default: auto-detect) |
-| `-p, --python BIN` | Python interpreter to use (default: `python3`) |
+| `-p, --python BIN` | Python 3.13 interpreter to use (default: `python3.13`) |
 | `-y, --yes` | Non-interactive, accept defaults |
 | `-h, --help` | Show help |
 
-Set `TORCH_INDEX_URL` to use a custom PyTorch wheel index (e.g. a different CUDA version).
+Set `TORCH_INDEX_URL` to use a custom PyTorch wheel index (default for NVIDIA is
+`https://download.pytorch.org/whl/cu132`).
 
 Re-running the script on an existing install pulls the latest ComfyUI and
 ComfyUI-Manager and refreshes dependencies.
